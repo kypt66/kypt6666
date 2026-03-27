@@ -1,0 +1,2154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>科研组图编辑器 Pro 5.0 - Nature/Science 级排版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=SimSun&family=SimHei&family=Microsoft+YaHei&family=Times+New+Roman&display=swap');
+        
+        body { font-family: 'Inter', 'Microsoft YaHei', sans-serif; background: #f1f5f9; }
+        
+        .composer-canvas {
+            background: white;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* 刻度线样式 */
+        .ruler {
+            position: absolute;
+            background: #f8fafc;
+            z-index: 5;
+        }
+        .ruler-h {
+            top: 0;
+            left: 30px;
+            right: 0;
+            height: 30px;
+            border-bottom: 1px solid #cbd5e1;
+        }
+        .ruler-v {
+            top: 30px;
+            left: 0;
+            bottom: 0;
+            width: 30px;
+            border-right: 1px solid #cbd5e1;
+        }
+        .ruler-tick {
+            position: absolute;
+            background: #94a3b8;
+        }
+        .ruler-h .ruler-tick {
+            bottom: 0;
+            width: 1px;
+        }
+        .ruler-v .ruler-tick {
+            right: 0;
+            height: 1px;
+        }
+        .ruler-number {
+            position: absolute;
+            font-size: 9px;
+            color: #64748b;
+        }
+        .ruler-h .ruler-number {
+            bottom: 4px;
+            transform: translateX(-50%);
+        }
+        .ruler-v .ruler-number {
+            right: 4px;
+            transform: translateY(-50%);
+        }
+        
+        .canvas-area {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            right: 0;
+            bottom: 0;
+            background-image: 
+                linear-gradient(to right, rgba(59, 130, 246, 0.05) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(59, 130, 246, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        
+        .image-box {
+            position: absolute;
+            border: 2px solid transparent;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: white;
+            overflow: hidden;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .image-box:hover { border-color: #3b82f6; }
+        .image-box.selected { 
+            border-color: #2563eb; 
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+            z-index: 100;
+        }
+        
+        .image-box img {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+            pointer-events: none;
+        }
+        
+        .image-box.fit-content img {
+            object-fit: contain;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .image-box.fill-content img {
+            object-fit: cover;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .guide-line {
+            position: absolute;
+            background: #ef4444;
+            z-index: 1000;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+        .guide-line.vertical { width: 1px; height: 100%; top: 0; }
+        .guide-line.horizontal { height: 1px; width: 100%; left: 0; }
+        
+        .snap-line {
+            position: absolute;
+            background: #10b981;
+            z-index: 999;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .snap-line.active { opacity: 1; }
+        .snap-line.vertical { width: 2px; height: 100%; top: 0; }
+        .snap-line.horizontal { height: 2px; width: 100%; left: 0; }
+        
+        .resize-handle {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #3b82f6;
+            border: 2px solid white;
+            border-radius: 50%;
+            z-index: 10;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        .resize-handle.se { bottom: -5px; right: -5px; cursor: se-resize; }
+        
+        /* 子标签 - 可拖动，透明背景 */
+        .sub-label {
+            position: absolute;
+            top: 8px;
+            left: 8px;
+            background: transparent;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 700;
+            font-size: 14px;
+            color: #0f172a;
+            border: none;
+            z-index: 5;
+            cursor: move;
+            user-select: none;
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.9), -1px -1px 2px rgba(255,255,255,0.9), 1px -1px 2px rgba(255,255,255,0.9), -1px 1px 2px rgba(255,255,255,0.9);
+        }
+        
+        .sub-label.hidden { display: none; }
+        .sub-label.dragging {
+            opacity: 0.7;
+            z-index: 1000;
+        }
+        
+        .label-toggle {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+            background: rgba(255,255,255,0.9);
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            color: #64748b;
+            z-index: 6;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .image-box:hover .label-toggle { opacity: 1; }
+        .label-toggle.active { background: #3b82f6; color: white; border-color: #2563eb; }
+        
+        .fit-mode-btn {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            width: 28px;
+            height: 28px;
+            background: rgba(255,255,255,0.9);
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 6;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .image-box:hover .fit-mode-btn { opacity: 1; }
+        .fit-mode-btn:hover { background: #eff6ff; border-color: #3b82f6; }
+        
+        .tool-btn {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 500;
+            color: #475569;
+            white-space: nowrap;
+        }
+        
+        .tool-btn:hover { background: #f8fafc; border-color: #cbd5e1; }
+        .tool-btn.active { background: #eff6ff; border-color: #3b82f6; color: #2563eb; }
+        .tool-btn.primary { background: #2563eb; color: white; border-color: #2563eb; }
+        .tool-btn.success { background: #10b981; color: white; border-color: #10b981; }
+        .tool-btn.gold { background: #f59e0b; color: white; border-color: #f59e0b; }
+        
+        /* 可拖动的总标题 - 透明背景 */
+        .bottom-title {
+            position: absolute;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: transparent;
+            padding: 8px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #0f172a;
+            border: none;
+            z-index: 10;
+            max-width: 90%;
+            text-align: center;
+            line-height: 1.4;
+            cursor: move;
+            user-select: none;
+            text-shadow: 1px 1px 3px rgba(255,255,255,1), -1px -1px 3px rgba(255,255,255,1), 1px -1px 3px rgba(255,255,255,1), -1px 1px 3px rgba(255,255,255,1);
+        }
+        
+        .bottom-title.dragging {
+            opacity: 0.8;
+            z-index: 1000;
+        }
+        
+        .layout-template {
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: white;
+        }
+        .layout-template:hover { border-color: #3b82f6; transform: translateY(-2px); }
+        .layout-template.active { border-color: #2563eb; background: #eff6ff; }
+        
+        .delete-btn {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 20px;
+            height: 20px;
+            background: #ef4444;
+            color: white;
+            border-radius: 50%;
+            border: 2px solid white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 50;
+            opacity: 0;
+            transition: opacity 0.2s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .image-box:hover .delete-btn { opacity: 1; }
+        
+        .template-grid {
+            display: grid;
+            gap: 2px;
+            height: 100%;
+        }
+        .template-cell {
+            background: #cbd5e1;
+            border-radius: 2px;
+        }
+        .template-cell.large { background: #94a3b8; }
+        
+        .upload-zone {
+            border: 2px dashed #cbd5e1;
+            transition: all 0.2s;
+        }
+        .upload-zone:hover { border-color: #3b82f6; background: #f8fafc; }
+        .upload-zone.dragover { border-color: #2563eb; background: #eff6ff; }
+        
+        .template-badge {
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        .badge-nature { background: #dcfce7; color: #166534; }
+        .badge-science { background: #dbeafe; color: #1e40af; }
+        .badge-cell { background: #fce7f3; color: #9d174d; }
+        .badge-general { background: #f3f4f6; color: #374151; }
+        
+        /* 模态框样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            max-width: 450px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+        
+        .modal-content-wide {
+            max-width: 500px;
+        }
+        
+        .font-control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .font-control-group select,
+        .font-control-group input {
+            padding: 6px 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        
+        .font-control-group button {
+            padding: 6px 10px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+        
+        .font-control-group button.active {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+        }
+        
+        .size-btn {
+            padding: 6px 12px;
+            border: 1px solid #e2e8f0;
+            background: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .size-btn.active {
+            background: #2563eb;
+            color: white;
+            border-color: #2563eb;
+        }
+        
+        .donate-qr {
+            width: 150px;
+            height: 150px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            border: 2px dashed #cbd5e1;
+        }
+        
+        .feedback-item {
+            border-bottom: 1px solid #e2e8f0;
+            padding: 12px 0;
+        }
+        .feedback-item:last-child {
+            border-bottom: none;
+        }
+        
+        .admin-panel {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-6">
+
+<!-- 反馈模态框 -->
+<div id="feedback-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h3 class="text-lg font-bold text-slate-800 mb-2">意见反馈</h3>
+        <p class="text-sm text-slate-500 mb-4">欢迎反馈意见，我们将进一步增强版本！</p>
+        <textarea id="feedback-content" rows="4" placeholder="请输入您的意见或建议..." class="w-full px-3 py-2 border border-slate-300 rounded-lg mb-3 text-sm resize-none"></textarea>
+        <input type="text" id="feedback-contact" placeholder="您的联系方式（选填）" class="w-full px-3 py-2 border border-slate-300 rounded-lg mb-4 text-sm">
+        <div class="flex gap-2">
+            <button onclick="hideFeedbackModal()" class="flex-1 tool-btn">取消</button>
+            <button onclick="submitFeedback()" class="flex-1 tool-btn primary">提交反馈</button>
+        </div>
+    </div>
+</div>
+
+<!-- 打赏模态框 -->
+<div id="donate-modal" class="modal-overlay hidden">
+    <div class="modal-content modal-content-wide">
+        <h3 class="text-lg font-bold text-slate-800 mb-2">支持我们</h3>
+        <p class="text-sm text-slate-500 mb-4">如果本工具对您有帮助，欢迎打赏支持我们继续改进！</p>
+        
+        <div id="donate-qr-container" class="mb-4">
+            <div class="donate-qr" id="donate-qr-display">
+                <span class="text-slate-400 text-sm">暂无收款码</span>
+            </div>
+            <p class="text-center text-sm text-slate-500 mt-2">微信/支付宝扫码打赏</p>
+        </div>
+        
+        <div class="flex gap-2">
+            <button onclick="hideDonateModal()" class="flex-1 tool-btn">关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- 管理员登录模态框 -->
+<div id="admin-login-modal" class="modal-overlay hidden">
+    <div class="modal-content">
+        <h3 class="text-lg font-bold text-slate-800 mb-4">管理员登录</h3>
+        <input type="password" id="admin-password" placeholder="请输入管理员密码" class="w-full px-3 py-2 border border-slate-300 rounded-lg mb-4 text-sm">
+        <div class="flex gap-2">
+            <button onclick="hideAdminLoginModal()" class="flex-1 tool-btn">取消</button>
+            <button onclick="adminLogin()" class="flex-1 tool-btn primary">登录</button>
+        </div>
+    </div>
+</div>
+
+<!-- 管理员面板模态框 -->
+<div id="admin-panel-modal" class="modal-overlay hidden">
+    <div class="modal-content modal-content-wide" style="max-height: 80vh; overflow-y: auto;">
+        <h3 class="text-lg font-bold text-slate-800 mb-4">管理员面板</h3>
+        
+        <div class="mb-6">
+            <h4 class="font-semibold text-slate-700 mb-2">设置打赏收款码</h4>
+            <div class="flex gap-2 mb-2">
+                <input type="file" id="donate-qr-file" accept="image/*" class="hidden" onchange="uploadDonateQR()">
+                <button onclick="document.getElementById('donate-qr-file').click()" class="tool-btn text-sm">上传收款码图片</button>
+                <button onclick="clearDonateQR()" class="tool-btn text-sm text-red-600">清除</button>
+            </div>
+            <p class="text-xs text-slate-400">上传后用户可在打赏窗口看到收款码</p>
+        </div>
+        
+        <div>
+            <h4 class="font-semibold text-slate-700 mb-2">用户反馈列表</h4>
+            <div id="feedback-list" class="max-h-60 overflow-y-auto">
+                <p class="text-sm text-slate-400">暂无反馈</p>
+            </div>
+        </div>
+        
+        <div class="flex gap-2 mt-4">
+            <button onclick="hideAdminPanelModal()" class="flex-1 tool-btn">关闭</button>
+            <button onclick="adminLogout()" class="tool-btn text-red-600">退出登录</button>
+        </div>
+    </div>
+</div>
+
+<header class="max-w-7xl mx-auto mb-6">
+    <div class="bg-white rounded-xl shadow-sm p-4 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-4">
+            <h1 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <svg class="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path>
+                </svg>
+                科研组图编辑器 Pro 5.0
+                <span class="text-xs bg-gradient-to-r from-green-500 to-blue-500 text-white px-2 py-1 rounded-full font-normal">Nature/Science 级</span>
+            </h1>
+            
+            <div class="flex items-center gap-2 bg-slate-100 rounded-lg p-1">
+                <button onclick="adjustImageCount(-1)" class="w-8 h-8 flex items-center justify-center rounded hover:bg-white transition text-slate-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
+                </button>
+                <span class="text-sm font-medium text-slate-700 w-16 text-center"><span id="image-count">5</span> 张</span>
+                <button onclick="adjustImageCount(1)" class="w-8 h-8 flex items-center justify-center rounded hover:bg-white transition text-slate-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                </button>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-2 flex-wrap">
+            <div class="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                <button onclick="distributeImages('horizontal')" class="tool-btn align-btn" title="水平等间距分布">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                    横向分布
+                </button>
+                <button onclick="distributeImages('vertical')" class="tool-btn align-btn" title="垂直等间距分布">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 4v16M12 4v16M18 4v16"></path></svg>
+                    纵向分布
+                </button>
+                <div class="w-px h-4 bg-slate-300 mx-1"></div>
+                <button onclick="alignImages('left')" class="tool-btn align-btn" title="左对齐">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h16"></path></svg>
+                </button>
+                <button onclick="alignImages('center-v')" class="tool-btn align-btn" title="水平居中">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M4 18h16"></path></svg>
+                </button>
+                <button onclick="alignImages('right')" class="tool-btn align-btn" title="右对齐">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M10 12h10M4 18h16"></path></svg>
+                </button>
+            </div>
+            
+            <div class="flex items-center gap-1 bg-slate-50 p-1 rounded-lg border border-slate-200">
+                <button onclick="toggleSnap()" class="tool-btn active" id="snap-btn" title="开启/关闭智能吸附">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                    吸附
+                </button>
+            </div>
+            
+            <button onclick="autoLayout()" class="tool-btn success">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                自动排版
+            </button>
+            
+            <button onclick="exportImage()" class="tool-btn primary">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                导出
+            </button>
+            
+            <button onclick="showDonateModal()" class="tool-btn gold">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clip-rule="evenodd"/></svg>
+                打赏
+            </button>
+            
+            <button onclick="showFeedbackModal()" class="tool-btn">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z"/></svg>
+                意见反馈
+            </button>
+        </div>
+    </div>
+</header>
+
+<main class="max-w-7xl mx-auto grid lg:grid-cols-12 gap-6">
+    <aside class="lg:col-span-3 space-y-4">
+        <div class="bg-white rounded-xl shadow-sm p-5">
+            <h3 class="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wide flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"></path></svg>
+                顶级期刊排版模板 (10种)
+            </h3>
+            
+            <div class="grid grid-cols-2 gap-2 mb-3">
+                <div class="layout-template" onclick="applyTemplate('grid1x2')" id="tpl-grid1x2">
+                    <div class="h-12 bg-slate-100 rounded p-1">
+                        <div class="template-grid" style="grid-template-columns: 1fr 1fr;">
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-slate-600">1×2 对比</span>
+                        <span class="template-badge badge-general">通用</span>
+                    </div>
+                </div>
+                
+                <div class="layout-template" onclick="applyTemplate('grid1x3')" id="tpl-grid1x3">
+                    <div class="h-12 bg-slate-100 rounded p-1">
+                        <div class="template-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-slate-600">1×3 序列</span>
+                        <span class="template-badge badge-general">通用</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2 mb-3">
+                <div class="layout-template active" onclick="applyTemplate('grid2x2')" id="tpl-grid2x2">
+                    <div class="h-12 bg-slate-100 rounded p-1">
+                        <div class="template-grid" style="grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;">
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-slate-600">2×2 标准</span>
+                        <span class="template-badge badge-nature">Nature</span>
+                    </div>
+                </div>
+                
+                <div class="layout-template" onclick="applyTemplate('grid2x3')" id="tpl-grid2x3">
+                    <div class="h-12 bg-slate-100 rounded p-1">
+                        <div class="template-grid" style="grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr;">
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-slate-600">2×3 网格</span>
+                        <span class="template-badge badge-science">Science</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2 mb-3">
+                <div class="layout-template" onclick="applyTemplate('nature5')" id="tpl-nature5">
+                    <div class="h-12 bg-slate-100 rounded p-1">
+                        <div class="template-grid" style="grid-template-columns: 2fr 1fr 1fr; grid-template-rows: 1fr 1fr;">
+                            <div class="template-cell large" style="grid-row: span 2;"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-slate-600">Nature 5图</span>
+                        <span class="template-badge badge-nature">Nature</span>
+                    </div>
+                </div>
+                
+                <div class="layout-template" onclick="applyTemplate('natureL')" id="tpl-natureL">
+                    <div class="h-12 bg-slate-100 rounded p-1">
+                        <div class="template-grid" style="grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr 1fr;">
+                            <div class="template-cell large" style="grid-row: span 3;"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-slate-600">Nature L型</span>
+                        <span class="template-badge badge-nature">Nature</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2 mb-3">
+                <div class="layout-template" onclick="applyTemplate('grid3x3')" id="tpl-grid3x3">
+                    <div class="h-12 bg-slate-100 rounded p-1">
+                        <div class="template-grid" style="grid-template-columns: 1fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr;">
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-slate-600">3×3 九宫格</span>
+                        <span class="template-badge badge-cell">Cell</span>
+                    </div>
+                </div>
+                
+                <div class="layout-template" onclick="applyTemplate('mainPlus8')" id="tpl-mainPlus8">
+                    <div class="h-12 bg-slate-100 rounded p-1">
+                        <div class="template-grid" style="grid-template-columns: 1fr 2fr 1fr; grid-template-rows: 1fr 2fr 1fr;">
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell large"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-slate-600">主图+8小图</span>
+                        <span class="template-badge badge-science">Science</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2 mb-3">
+                <div class="layout-template" onclick="applyTemplate('cell6')" id="tpl-cell6">
+                    <div class="h-12 bg-slate-100 rounded p-1">
+                        <div class="template-grid" style="grid-template-columns: 1fr 1fr; grid-template-rows: 2fr 1fr 1fr;">
+                            <div class="template-cell large" style="grid-column: span 2;"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-slate-600">Cell 6图</span>
+                        <span class="template-badge badge-cell">Cell</span>
+                    </div>
+                </div>
+                
+                <div class="layout-template" onclick="applyTemplate('science7')" id="tpl-science7">
+                    <div class="h-12 bg-slate-100 rounded p-1">
+                        <div class="template-grid" style="grid-template-columns: 2fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr;">
+                            <div class="template-cell large" style="grid-row: span 2;"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell" style="grid-column: span 2;"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-slate-600">Science 7图</span>
+                        <span class="template-badge badge-science">Science</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-2">
+                <div class="layout-template" onclick="applyTemplate('nature8')" id="tpl-nature8">
+                    <div class="h-12 bg-slate-100 rounded p-1">
+                        <div class="template-grid" style="grid-template-columns: 1fr 1fr; grid-template-rows: 2fr 1fr 1fr;">
+                            <div class="template-cell large"></div>
+                            <div class="template-cell large"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-slate-600">Nature 8图</span>
+                        <span class="template-badge badge-nature">Nature</span>
+                    </div>
+                </div>
+                
+                <div class="layout-template" onclick="applyTemplate('comprehensive9')" id="tpl-comprehensive9">
+                    <div class="h-12 bg-slate-100 rounded p-1">
+                        <div class="template-grid" style="grid-template-columns: 2fr 1fr 1fr; grid-template-rows: 1fr 1fr 1fr;">
+                            <div class="template-cell large" style="grid-row: span 2;"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell"></div>
+                            <div class="template-cell" style="grid-column: span 2;"></div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <span class="text-xs text-slate-600">综合9图</span>
+                        <span class="template-badge badge-general">综述</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-5">
+            <h3 class="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wide">上传图片 (支持2-9张)</h3>
+            <div class="space-y-2 max-h-64 overflow-y-auto" id="upload-container"></div>
+            <p class="text-xs text-slate-400 mt-2">点击 ↔ 切换填充/适应模式</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-5">
+            <h3 class="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wide">总标题设置</h3>
+            <input type="text" id="main-title" placeholder="输入总标题..." 
+                   class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm mb-3">
+            
+            <div class="space-y-3 mb-3">
+                <div class="font-control-group">
+                    <label class="text-xs text-slate-500">字体:</label>
+                    <select id="title-font" onchange="updateTitleStyle()">
+                        <option value="'Inter', 'Microsoft YaHei', sans-serif">微软雅黑</option>
+                        <option value="'SimSun', serif">宋体</option>
+                        <option value="'SimHei', sans-serif">黑体</option>
+                        <option value="'Times New Roman', serif">Times New Roman</option>
+                        <option value="Arial, sans-serif">Arial</option>
+                    </select>
+                </div>
+                <div class="font-control-group">
+                    <label class="text-xs text-slate-500">字号:</label>
+                    <input type="number" id="title-size" value="16" min="10" max="72" onchange="updateTitleStyle()" class="w-16">
+                    <span class="text-xs text-slate-400">px</span>
+                </div>
+                <div class="font-control-group">
+                    <button id="btn-bold" onclick="toggleTitleBold()" class="font-bold">B</button>
+                    <button id="btn-italic" onclick="toggleTitleItalic()" class="italic">I</button>
+                    <button id="btn-underline" onclick="toggleTitleUnderline()" class="underline">U</button>
+                </div>
+                <div class="font-control-group">
+                    <label class="text-xs text-slate-500">颜色:</label>
+                    <input type="color" id="title-color" value="#0f172a" onchange="updateTitleStyle()" class="w-10 h-8 p-0 border-0">
+                </div>
+            </div>
+            
+            <p class="text-xs text-slate-400">提示：标题可在画布中拖动调整位置</p>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-sm p-5">
+            <h3 class="font-semibold text-slate-800 mb-3 text-sm uppercase tracking-wide">子图标签设置</h3>
+            
+            <div class="mb-3">
+                <label class="text-xs text-slate-500 mb-1 block">字号大小:</label>
+                <div class="flex gap-2">
+                    <button class="size-btn" onclick="setLabelSize('small', this)" title="小 - 适合多图">小</button>
+                    <button class="size-btn active" onclick="setLabelSize('medium', this)" title="中 - Nature/Science标准">中</button>
+                    <button class="size-btn" onclick="setLabelSize('large', this)" title="大 - 适合大图">大</button>
+                </div>
+                <p class="text-xs text-slate-400 mt-1">默认中号，符合Nature/Science标准</p>
+            </div>
+            
+            <div class="flex items-center gap-3 mb-3 p-3 bg-blue-50 rounded-lg border border-blue-100">
+                <input type="checkbox" id="auto-reorder" checked class="w-4 h-4 text-blue-600 rounded">
+                <div>
+                    <label for="auto-reorder" class="text-sm font-medium text-blue-800">隐藏后自动重排</label>
+                    <p class="text-xs text-blue-600">隐藏a标签后，b→a, c→b...</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3 mb-3">
+                <input type="checkbox" id="show-all-labels" checked onchange="toggleAllLabels()" class="w-4 h-4 text-blue-600 rounded">
+                <label for="show-all-labels" class="text-sm text-slate-600">显示全部标签</label>
+            </div>
+            
+            <select id="label-style" onchange="updateLabelStyle()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm mb-3">
+                <option value="lower">小写字母 (a, b, c...)</option>
+                <option value="upper">大写字母 (A, B, C...)</option>
+                <option value="roman">罗马数字 (i, ii, iii...)</option>
+                <option value="number">阿拉伯数字 (1, 2, 3...)</option>
+            </select>
+            
+            <div class="text-xs text-slate-500 space-y-1">
+                <p>• 悬停图片，点击右上角 <span class="font-bold">a</span> 隐藏该标签</p>
+                <p>• 标签可在图片内拖动调整位置</p>
+                <p>• 纵向长图建议点击右下角 ↔ 切换为适应模式</p>
+            </div>
+        </div>
+    </aside>
+
+    <section class="lg:col-span-9">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+            <div class="flex justify-between items-center mb-4">
+                <div class="flex items-center gap-3">
+                    <h3 class="font-semibold text-slate-800">编辑画布</h3>
+                    <span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full" id="snap-status">智能吸附: 开启</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="equalizeSize()" class="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-1 rounded transition">统一尺寸</button>
+                    <button onclick="resetLayout()" class="text-xs bg-red-50 text-red-600 hover:bg-red-100 px-3 py-1 rounded transition">重置布局</button>
+                </div>
+            </div>
+            
+            <div id="canvas-container" class="composer-canvas rounded-lg relative" style="width: 100%; height: 700px;">
+                <!-- 水平刻度 -->
+                <div class="ruler ruler-h" id="ruler-h"></div>
+                <!-- 垂直刻度 -->
+                <div class="ruler ruler-v" id="ruler-v"></div>
+                <!-- 画布区域 -->
+                <div class="canvas-area" id="canvas-area">
+                    <div class="snap-line vertical" id="snap-line-v"></div>
+                    <div class="snap-line horizontal" id="snap-line-h"></div>
+                </div>
+            </div>
+            
+            <div class="mt-4 flex justify-between items-center text-xs text-slate-500">
+                <span>
+                    <span class="font-medium text-blue-600">操作提示：</span>
+                    拖拽移动 • 拖拽右下角调整大小 • <span class="text-red-500 font-medium">红色辅助线</span> = 智能吸附 • 标签可拖动调整位置
+                </span>
+                <span>免费导出高清图片</span>
+            </div>
+        </div>
+    </section>
+</main>
+
+<!-- 管理员入口（右下角小按钮） -->
+<div class="admin-panel">
+    <button onclick="showAdminLoginModal()" class="text-xs text-slate-400 hover:text-slate-600 px-2 py-1" title="管理员入口">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+    </button>
+</div>
+
+<script>
+
+// 管理员密码
+const ADMIN_PASSWORD = 'admin123';
+
+// 状态管理
+const state = {
+    imageCount: 5,
+    minImages: 2,
+    maxImages: 9,
+    images: [],
+    imageLabels: [true, true, true, true, true, true, true, true, true],
+    imageFitModes: ['fill', 'fill', 'fill', 'fill', 'fill', 'fill', 'fill', 'fill', 'fill'],
+    labelPositions: [{}, {}, {}, {}, {}, {}, {}, {}, {}],
+    autoReorder: true,
+    selectedElement: null,
+    isDragging: false,
+    dragOffset: { x: 0, y: 0 },
+    isResizing: false,
+    resizeStart: { x: 0, y: 0, w: 0, h: 0, left: 0, top: 0 },
+    snapEnabled: true,
+    currentTemplate: 'grid2x2',
+    labelSize: 'medium',
+    titleStyle: {
+        fontFamily: "'Inter', 'Microsoft YaHei', sans-serif",
+        fontSize: 16,
+        fontWeight: '600',
+        fontStyle: 'normal',
+        textDecoration: 'none',
+        color: '#0f172a'
+    },
+    titlePosition: { x: null, y: null },
+    isAdmin: false
+};
+
+// 标签尺寸配置
+const LABEL_SIZES = {
+    small: { fontSize: 10, padding: '2px 6px' },
+    medium: { fontSize: 14, padding: '2px 8px' },
+    large: { fontSize: 18, padding: '4px 12px' }
+};
+
+const labels = {
+    lower: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'],
+    upper: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'],
+    roman: ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix'],
+    number: ['1', '2', '3', '4', '5', '6', '7', '8', '9']
+};
+
+let currentLabelStyle = 'lower';
+
+// ========== 反馈功能 ==========
+function showFeedbackModal() {
+    document.getElementById('feedback-modal').classList.remove('hidden');
+}
+
+function hideFeedbackModal() {
+    document.getElementById('feedback-modal').classList.add('hidden');
+}
+
+function submitFeedback() {
+    const content = document.getElementById('feedback-content').value.trim();
+    const contact = document.getElementById('feedback-contact').value.trim();
+    
+    if (!content) {
+        alert('请输入反馈内容！');
+        return;
+    }
+    
+    const feedback = {
+        id: Date.now(),
+        content,
+        contact,
+        time: new Date().toLocaleString('zh-CN')
+    };
+    
+    const feedbacks = JSON.parse(localStorage.getItem('sciFigureFeedback') || '[]');
+    feedbacks.push(feedback);
+    localStorage.setItem('sciFigureFeedback', JSON.stringify(feedbacks));
+    
+    alert('感谢您的反馈！我们会认真阅读并持续改进。');
+    hideFeedbackModal();
+    document.getElementById('feedback-content').value = '';
+    document.getElementById('feedback-contact').value = '';
+}
+
+// ========== 打赏功能 ==========
+function showDonateModal() {
+    const qrData = localStorage.getItem('sciFigureDonateQR');
+    const qrDisplay = document.getElementById('donate-qr-display');
+    
+    if (qrData) {
+        qrDisplay.innerHTML = `<img src="${qrData}" style="max-width: 100%; max-height: 100%; border-radius: 6px;">`;
+    } else {
+        qrDisplay.innerHTML = '<span class="text-slate-400 text-sm">暂无收款码<br>敬请期待</span>';
+    }
+    
+    document.getElementById('donate-modal').classList.remove('hidden');
+}
+
+function hideDonateModal() {
+    document.getElementById('donate-modal').classList.add('hidden');
+}
+
+// ========== 管理员功能 ==========
+function showAdminLoginModal() {
+    document.getElementById('admin-login-modal').classList.remove('hidden');
+}
+
+function hideAdminLoginModal() {
+    document.getElementById('admin-login-modal').classList.add('hidden');
+}
+
+function adminLogin() {
+    const password = document.getElementById('admin-password').value;
+    if (password === ADMIN_PASSWORD) {
+        state.isAdmin = true;
+        hideAdminLoginModal();
+        showAdminPanelModal();
+        document.getElementById('admin-password').value = '';
+    } else {
+        alert('密码错误！');
+    }
+}
+
+function showAdminPanelModal() {
+    loadFeedbackList();
+    document.getElementById('admin-panel-modal').classList.remove('hidden');
+}
+
+function hideAdminPanelModal() {
+    document.getElementById('admin-panel-modal').classList.add('hidden');
+}
+
+function adminLogout() {
+    state.isAdmin = false;
+    hideAdminPanelModal();
+}
+
+function loadFeedbackList() {
+    const feedbacks = JSON.parse(localStorage.getItem('sciFigureFeedback') || '[]');
+    const listContainer = document.getElementById('feedback-list');
+    
+    if (feedbacks.length === 0) {
+        listContainer.innerHTML = '<p class="text-sm text-slate-400">暂无反馈</p>';
+        return;
+    }
+    
+    listContainer.innerHTML = feedbacks.slice().reverse().map(f => `
+        <div class="feedback-item">
+            <div class="text-sm text-slate-700 mb-1">${f.content}</div>
+            <div class="text-xs text-slate-400 flex justify-between">
+                <span>${f.contact || '匿名用户'}</span>
+                <span>${f.time}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+function uploadDonateQR() {
+    const file = document.getElementById('donate-qr-file').files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        localStorage.setItem('sciFigureDonateQR', e.target.result);
+        alert('收款码上传成功！');
+    };
+    reader.readAsDataURL(file);
+}
+
+function clearDonateQR() {
+    localStorage.removeItem('sciFigureDonateQR');
+    alert('收款码已清除！');
+}
+
+// ========== 标签尺寸设置 ==========
+function setLabelSize(size, btn) {
+    state.labelSize = size;
+    document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    updateAllLabels();
+}
+
+// ========== 初始化 ==========
+function init() {
+    state.imageCount = 5;
+    document.getElementById('image-count').textContent = '5';
+    document.getElementById('auto-reorder').checked = state.autoReorder;
+    document.getElementById('auto-reorder').addEventListener('change', (e) => {
+        state.autoReorder = e.target.checked;
+        updateAllLabels();
+    });
+    
+    // 实时显示标题
+    document.getElementById('main-title').addEventListener('input', updateMainTitle);
+    
+    createUploadZones();
+    initializeCanvas();
+    createRulers();
+    
+    setTimeout(() => applyTemplate('nature5'), 100);
+}
+
+// ========== 刻度尺 ==========
+function createRulers() {
+    const rulerH = document.getElementById('ruler-h');
+    const rulerV = document.getElementById('ruler-v');
+    
+    rulerH.innerHTML = '';
+    rulerV.innerHTML = '';
+    
+    for (let i = 0; i <= 1200; i += 50) {
+        const tick = document.createElement('div');
+        tick.className = 'ruler-tick';
+        tick.style.left = i + 'px';
+        tick.style.height = (i % 100 === 0 ? '10px' : '5px');
+        rulerH.appendChild(tick);
+        
+        if (i % 100 === 0) {
+            const num = document.createElement('div');
+            num.className = 'ruler-number';
+            num.style.left = i + 'px';
+            num.textContent = i;
+            rulerH.appendChild(num);
+        }
+    }
+    
+    for (let i = 0; i <= 800; i += 50) {
+        const tick = document.createElement('div');
+        tick.className = 'ruler-tick';
+        tick.style.top = i + 'px';
+        tick.style.width = (i % 100 === 0 ? '10px' : '5px');
+        rulerV.appendChild(tick);
+        
+        if (i % 100 === 0) {
+            const num = document.createElement('div');
+            num.className = 'ruler-number';
+            num.style.top = i + 'px';
+            num.textContent = i;
+            rulerV.appendChild(num);
+        }
+    }
+}
+
+function getEffectiveLabels() {
+    const style = labels[currentLabelStyle];
+    if (!state.autoReorder) {
+        return state.imageLabels.map((show, i) => show ? style[i] : '');
+    }
+    
+    const effective = [];
+    let labelIndex = 0;
+    for (let i = 0; i < state.imageCount; i++) {
+        if (state.imageLabels[i] && labelIndex < style.length) {
+            effective.push(style[labelIndex]);
+            labelIndex++;
+        } else {
+            effective.push('');
+        }
+    }
+    return effective;
+}
+
+function createUploadZones() {
+    const container = document.getElementById('upload-container');
+    container.innerHTML = '';
+    
+    for (let i = 0; i < state.imageCount; i++) {
+        const div = document.createElement('div');
+        div.className = 'upload-zone rounded-lg p-3 cursor-pointer transition flex items-center gap-3 bg-slate-50';
+        
+        const effectiveLabels = getEffectiveLabels();
+        const labelText = effectiveLabels[i] || '无标签';
+        const fitModeText = state.imageFitModes[i] === 'fit' ? ' [适应]' : ' [填充]';
+        
+        div.innerHTML = `
+            <div class="w-10 h-10 rounded bg-white flex items-center justify-center text-slate-400 flex-shrink-0 border border-slate-200">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-slate-700 truncate" id="filename-${i}">
+                    图片 ${i+1} (${labelText})${fitModeText}
+                </div>
+                <div class="text-xs text-slate-400">${state.images[i] ? '已上传' : '点击上传'}</div>
+            </div>
+            <input type="file" id="file-${i}" class="hidden" accept="image/*" onchange="handleFile(event, ${i})">
+        `;
+        div.onclick = (e) => {
+            if (e.target.tagName !== 'INPUT') document.getElementById(`file-${i}`).click();
+        };
+        div.ondrop = (e) => handleDrop(e, i);
+        div.ondragover = (e) => { e.preventDefault(); div.classList.add('dragover'); };
+        div.ondragleave = () => div.classList.remove('dragover');
+        container.appendChild(div);
+    }
+}
+
+function adjustImageCount(delta) {
+    const newCount = state.imageCount + delta;
+    if (newCount >= state.minImages && newCount <= state.maxImages) {
+        state.imageCount = newCount;
+        document.getElementById('image-count').textContent = newCount;
+        
+        if (delta > 0) {
+            for (let i = state.images.length; i < newCount; i++) {
+                state.images.push(null);
+                state.imageLabels.push(true);
+                state.imageFitModes.push('fill');
+                state.labelPositions.push({});
+            }
+        } else {
+            state.images = state.images.slice(0, newCount);
+            state.imageLabels = state.imageLabels.slice(0, newCount);
+            state.imageFitModes = state.imageFitModes.slice(0, newCount);
+            state.labelPositions = state.labelPositions.slice(0, newCount);
+            for (let i = newCount; i < state.maxImages; i++) {
+                const el = document.getElementById(`image-box-${i}`);
+                if (el) el.remove();
+            }
+        }
+        
+        createUploadZones();
+        if (delta > 0) autoLayout();
+    }
+}
+
+const templates = {
+    grid1x2: {
+        count: 2,
+        layout: (cw, ch, pad, gap) => {
+            const w = (cw - gap) / 2;
+            return [
+                { x: pad, y: pad, w: w, h: ch },
+                { x: pad + w + gap, y: pad, w: w, h: ch }
+            ];
+        }
+    },
+    grid1x3: {
+        count: 3,
+        layout: (cw, ch, pad, gap) => {
+            const w = (cw - gap * 2) / 3;
+            return [
+                { x: pad, y: pad, w: w, h: ch },
+                { x: pad + w + gap, y: pad, w: w, h: ch },
+                { x: pad + 2 * (w + gap), y: pad, w: w, h: ch }
+            ];
+        }
+    },
+    grid2x2: {
+        count: 4,
+        layout: (cw, ch, pad, gap) => {
+            const w = (cw - gap) / 2;
+            const h = (ch - gap) / 2;
+            return [
+                { x: pad, y: pad, w: w, h: h },
+                { x: pad + w + gap, y: pad, w: w, h: h },
+                { x: pad, y: pad + h + gap, w: w, h: h },
+                { x: pad + w + gap, y: pad + h + gap, w: w, h: h }
+            ];
+        }
+    },
+    grid2x3: {
+        count: 6,
+        layout: (cw, ch, pad, gap) => {
+            const w = (cw - gap * 2) / 3;
+            const h = (ch - gap) / 2;
+            const positions = [];
+            for (let row = 0; row < 2; row++) {
+                for (let col = 0; col < 3; col++) {
+                    positions.push({
+                        x: pad + col * (w + gap),
+                        y: pad + row * (h + gap),
+                        w: w,
+                        h: h
+                    });
+                }
+            }
+            return positions;
+        }
+    },
+    nature5: {
+        count: 5,
+        layout: (cw, ch, pad, gap) => {
+            const wLeft = cw * 0.42;
+            const wRight = cw * 0.58 - gap;
+            const hRight = (ch - gap) / 2;
+            return [
+                { x: pad, y: pad, w: wLeft, h: ch },
+                { x: pad + wLeft + gap, y: pad, w: wRight / 2 - gap/2, h: hRight },
+                { x: pad + wLeft + gap + wRight / 2 + gap/2, y: pad, w: wRight / 2 - gap/2, h: hRight },
+                { x: pad + wLeft + gap, y: pad + hRight + gap, w: wRight / 2 - gap/2, h: hRight },
+                { x: pad + wLeft + gap + wRight / 2 + gap/2, y: pad + hRight + gap, w: wRight / 2 - gap/2, h: hRight }
+            ];
+        }
+    },
+    natureL: {
+        count: 4,
+        layout: (cw, ch, pad, gap) => {
+            const wMain = cw * 0.65;
+            const wSide = cw * 0.35 - gap;
+            const hSide = (ch - gap * 2) / 3;
+            return [
+                { x: pad, y: pad, w: wMain, h: ch },
+                { x: pad + wMain + gap, y: pad, w: wSide, h: hSide },
+                { x: pad + wMain + gap, y: pad + hSide + gap, w: wSide, h: hSide },
+                { x: pad + wMain + gap, y: pad + 2 * (hSide + gap), w: wSide, h: hSide }
+            ];
+        }
+    },
+    grid3x3: {
+        count: 9,
+        layout: (cw, ch, pad, gap) => {
+            const w = (cw - gap * 2) / 3;
+            const h = (ch - gap * 2) / 3;
+            const positions = [];
+            for (let row = 0; row < 3; row++) {
+                for (let col = 0; col < 3; col++) {
+                    positions.push({
+                        x: pad + col * (w + gap),
+                        y: pad + row * (h + gap),
+                        w: w,
+                        h: h
+                    });
+                }
+            }
+            return positions;
+        }
+    },
+    mainPlus8: {
+        count: 9,
+        layout: (cw, ch, pad, gap) => {
+            const wSide = (cw - gap * 2) / 3;
+            const hSide = (ch - gap * 2) / 3;
+            const wCenter = cw - 2 * (wSide + gap);
+            const hCenter = ch - 2 * (hSide + gap);
+            return [
+                { x: pad, y: pad, w: wSide, h: hSide },
+                { x: pad + wSide + gap, y: pad, w: wCenter, h: hSide },
+                { x: pad + wSide + gap + wCenter + gap, y: pad, w: wSide, h: hSide },
+                { x: pad, y: pad + hSide + gap, w: wSide, h: hCenter },
+                { x: pad + wSide + gap, y: pad + hSide + gap, w: wCenter, h: hCenter },
+                { x: pad + wSide + gap + wCenter + gap, y: pad + hSide + gap, w: wSide, h: hCenter },
+                { x: pad, y: pad + hSide + gap + hCenter + gap, w: wSide, h: hSide },
+                { x: pad + wSide + gap, y: pad + hSide + gap + hCenter + gap, w: wCenter, h: hSide },
+                { x: pad + wSide + gap + wCenter + gap, y: pad + hSide + gap + hCenter + gap, w: wSide, h: hSide }
+            ];
+        }
+    },
+    cell6: {
+        count: 6,
+        layout: (cw, ch, pad, gap) => {
+            const hTop = ch * 0.55;
+            const hBottom = ch * 0.45 - gap;
+            const wBottomSmall = (cw - gap * 3) / 4;
+            return [
+                { x: pad, y: pad, w: cw, h: hTop },
+                { x: pad, y: pad + hTop + gap, w: wBottomSmall, h: hBottom },
+                { x: pad + wBottomSmall + gap, y: pad + hTop + gap, w: wBottomSmall, h: hBottom },
+                { x: pad + 2 * (wBottomSmall + gap), y: pad + hTop + gap, w: wBottomSmall, h: hBottom },
+                { x: pad + 3 * (wBottomSmall + gap), y: pad + hTop + gap, w: wBottomSmall, h: hBottom }
+            ];
+        }
+    },
+    science7: {
+        count: 7,
+        layout: (cw, ch, pad, gap) => {
+            const wLeft = cw * 0.5;
+            const wRight = cw * 0.5 - gap;
+            const hRightSmall = (ch - gap * 2) / 3;
+            const hBottom = (ch - hRightSmall * 2 - gap * 2) / 2;
+            return [
+                { x: pad, y: pad, w: wLeft, h: ch - hBottom - gap },
+                { x: pad + wLeft + gap, y: pad, w: wRight, h: hRightSmall },
+                { x: pad + wLeft + gap, y: pad + hRightSmall + gap, w: wRight, h: hRightSmall },
+                { x: pad, y: pad + ch - hBottom - gap, w: wLeft / 2 - gap/2, h: hBottom },
+                { x: pad + wLeft / 2 + gap/2, y: pad + ch - hBottom - gap, w: wLeft / 2 - gap/2, h: hBottom },
+                { x: pad + wLeft + gap, y: pad + 2 * (hRightSmall + gap), w: wRight / 2 - gap/2, h: ch - 2 * (hRightSmall + gap) },
+                { x: pad + wLeft + gap + wRight / 2 + gap/2, y: pad + 2 * (hRightSmall + gap), w: wRight / 2 - gap/2, h: ch - 2 * (hRightSmall + gap) }
+            ];
+        }
+    },
+    nature8: {
+        count: 8,
+        layout: (cw, ch, pad, gap) => {
+            const wMain = (cw - gap) / 2;
+            const hMain = ch * 0.6;
+            const hSmall = (ch - hMain - gap) / 2;
+            const wSmall = (cw - gap * 3) / 4;
+            return [
+                { x: pad, y: pad, w: wMain, h: hMain },
+                { x: pad + wMain + gap, y: pad, w: wMain, h: hMain },
+                { x: pad, y: pad + hMain + gap, w: wSmall, h: hSmall },
+                { x: pad + wSmall + gap, y: pad + hMain + gap, w: wSmall, h: hSmall },
+                { x: pad + 2 * (wSmall + gap), y: pad + hMain + gap, w: wSmall, h: hSmall },
+                { x: pad + 3 * (wSmall + gap), y: pad + hMain + gap, w: wSmall, h: hSmall },
+                { x: pad, y: pad + hMain + gap + hSmall + gap, w: (cw - gap) / 2, h: ch - hMain - hSmall - gap * 2 },
+                { x: pad + (cw + gap) / 2, y: pad + hMain + gap + hSmall + gap, w: (cw - gap) / 2, h: ch - hMain - hSmall - gap * 2 }
+            ];
+        }
+    },
+    comprehensive9: {
+        count: 9,
+        layout: (cw, ch, pad, gap) => {
+            const wLeft = cw * 0.4;
+            const wRight = cw * 0.6 - gap;
+            const hTopRight = (ch * 0.5 - gap) / 2;
+            const hBottom = ch * 0.5;
+            return [
+                { x: pad, y: pad, w: wLeft, h: ch - hBottom - gap },
+                { x: pad + wLeft + gap, y: pad, w: wRight / 2 - gap/2, h: hTopRight },
+                { x: pad + wLeft + gap + wRight / 2 + gap/2, y: pad, w: wRight / 2 - gap/2, h: hTopRight },
+                { x: pad + wLeft + gap, y: pad + hTopRight + gap, w: wRight / 2 - gap/2, h: hTopRight },
+                { x: pad + wLeft + gap + wRight / 2 + gap/2, y: pad + hTopRight + gap, w: wRight / 2 - gap/2, h: hTopRight },
+                { x: pad, y: pad + ch - hBottom, w: wLeft / 2 - gap/2, h: hBottom },
+                { x: pad + wLeft / 2 + gap/2, y: pad + ch - hBottom, w: wLeft / 2 - gap/2, h: hBottom },
+                { x: pad + wLeft + gap, y: pad + ch - hBottom, w: wRight / 2 - gap/2, h: hBottom },
+                { x: pad + wLeft + gap + wRight / 2 + gap/2, y: pad + ch - hBottom, w: wRight / 2 - gap/2, h: hBottom }
+            ];
+        }
+    }
+};
+
+function autoLayout() {
+    const canvasArea = document.getElementById('canvas-area');
+    const padding = 24;
+    const gap = 16;
+    const cw = canvasArea.offsetWidth - padding * 2;
+    const ch = canvasArea.offsetHeight - padding * 2 - 60;
+    
+    const template = templates[state.currentTemplate];
+    if (!template) return;
+    
+    const positions = template.layout(cw, ch, padding, gap);
+    
+    positions.forEach((pos, i) => {
+        if (i < state.imageCount && state.images[i]) {
+            updateImageBox(i, pos);
+        }
+    });
+}
+
+function applyTemplate(type) {
+    state.currentTemplate = type;
+    document.querySelectorAll('.layout-template').forEach(t => t.classList.remove('active'));
+    document.getElementById(`tpl-${type}`).classList.add('active');
+    
+    const template = templates[type];
+    if (template && template.count !== state.imageCount) {
+        const diff = template.count - state.imageCount;
+        adjustImageCount(diff);
+    } else {
+        autoLayout();
+    }
+}
+
+function updateImageBox(index, pos) {
+    let box = document.getElementById(`image-box-${index}`);
+    if (!box) {
+        createImageBox(index, pos);
+    } else {
+        box.style.left = pos.x + 'px';
+        box.style.top = pos.y + 'px';
+        box.style.width = pos.w + 'px';
+        box.style.height = pos.h + 'px';
+    }
+}
+
+function createImageBox(index, pos) {
+    const canvasArea = document.getElementById('canvas-area');
+    
+    let box = document.getElementById(`image-box-${index}`);
+    if (box) box.remove();
+    
+    box = document.createElement('div');
+    box.id = `image-box-${index}`;
+    
+    const fitMode = state.imageFitModes[index];
+    box.className = `image-box ${fitMode === 'fit' ? 'fit-content' : 'fill-content'}`;
+    
+    box.dataset.index = index;
+    box.dataset.type = 'image';
+    box.style.left = pos.x + 'px';
+    box.style.top = pos.y + 'px';
+    box.style.width = pos.w + 'px';
+    box.style.height = pos.h + 'px';
+    
+    const img = document.createElement('img');
+    img.id = `img-${index}`;
+    img.src = state.images[index] || '';
+    img.draggable = false;
+    box.appendChild(img);
+    
+    // 创建可拖动的子标签
+    const effectiveLabels = getEffectiveLabels();
+    const label = document.createElement('div');
+    label.className = 'sub-label' + (effectiveLabels[index] ? '' : ' hidden');
+    label.id = `label-${index}`;
+    label.textContent = effectiveLabels[index];
+    
+    // 应用标签尺寸
+    const sizeConfig = LABEL_SIZES[state.labelSize];
+    label.style.fontSize = sizeConfig.fontSize + 'px';
+    label.style.padding = sizeConfig.padding;
+    
+    // 恢复标签位置偏移
+    const offset = state.labelPositions[index] || { x: 0, y: 0 };
+    label.style.left = (8 + offset.x) + 'px';
+    label.style.top = (8 + offset.y) + 'px';
+    
+    // 使标签可拖动
+    makeLabelDraggable(label, index);
+    
+    box.appendChild(label);
+    
+    const toggle = document.createElement('div');
+    toggle.className = 'label-toggle' + (state.imageLabels[index] ? ' active' : '');
+    toggle.innerHTML = state.imageLabels[index] ? 'a' : '<s>a</s>';
+    toggle.title = state.imageLabels[index] ? '点击隐藏标签' : '点击显示标签';
+    toggle.onclick = (e) => { e.stopPropagation(); toggleLabel(index); };
+    box.appendChild(toggle);
+    
+    const fitBtn = document.createElement('div');
+    fitBtn.className = 'fit-mode-btn';
+    fitBtn.innerHTML = fitMode === 'fit' ? '↔' : '⇲';
+    fitBtn.title = fitMode === 'fit' ? '当前：适应模式（完整显示），点击切换为填充模式' : '当前：填充模式（可能裁剪），点击切换为适应模式';
+    fitBtn.onclick = (e) => { e.stopPropagation(); toggleFitMode(index); };
+    box.appendChild(fitBtn);
+    
+    const handle = document.createElement('div');
+    handle.className = 'resize-handle se';
+    handle.onmousedown = (e) => startResize(e, box, 'se');
+    box.appendChild(handle);
+    
+    const delBtn = document.createElement('div');
+    delBtn.className = 'delete-btn';
+    delBtn.innerHTML = '×';
+    delBtn.onclick = (e) => { e.stopPropagation(); removeImage(index); };
+    box.appendChild(delBtn);
+    
+    box.onmousedown = (e) => startDrag(e, box, 'image');
+    
+    canvasArea.appendChild(box);
+}
+
+// 使标签可拖动
+function makeLabelDraggable(label, index) {
+    let isDragging = false;
+    let startX, startY, startLeft, startTop;
+    
+    label.onmousedown = (e) => {
+        e.stopPropagation();
+        isDragging = true;
+        label.classList.add('dragging');
+        
+        startX = e.clientX;
+        startY = e.clientY;
+        startLeft = parseInt(label.style.left) || 8;
+        startTop = parseInt(label.style.top) || 8;
+        
+        document.onmousemove = (e) => {
+            if (!isDragging) return;
+            
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            
+            const newLeft = startLeft + dx;
+            const newTop = startTop + dy;
+            
+            label.style.left = newLeft + 'px';
+            label.style.top = newTop + 'px';
+            
+            state.labelPositions[index] = {
+                x: newLeft - 8,
+                y: newTop - 8
+            };
+        };
+        
+        document.onmouseup = () => {
+            isDragging = false;
+            label.classList.remove('dragging');
+            document.onmousemove = null;
+            document.onmouseup = null;
+        };
+    };
+}
+
+function toggleFitMode(index) {
+    state.imageFitModes[index] = state.imageFitModes[index] === 'fit' ? 'fill' : 'fit';
+    const box = document.getElementById(`image-box-${index}`);
+    const fitBtn = box.querySelector('.fit-mode-btn');
+    
+    if (state.imageFitModes[index] === 'fit') {
+        box.classList.remove('fill-content');
+        box.classList.add('fit-content');
+        fitBtn.innerHTML = '↔';
+    } else {
+        box.classList.remove('fit-content');
+        box.classList.add('fill-content');
+        fitBtn.innerHTML = '⇲';
+    }
+    
+    createUploadZones();
+}
+
+function toggleLabel(index) {
+    state.imageLabels[index] = !state.imageLabels[index];
+    updateAllLabels();
+}
+
+function updateAllLabels() {
+    const effectiveLabels = getEffectiveLabels();
+    const sizeConfig = LABEL_SIZES[state.labelSize];
+    
+    for (let i = 0; i < state.imageCount; i++) {
+        const box = document.getElementById(`image-box-${i}`);
+        if (!box) continue;
+        
+        const label = box.querySelector('.sub-label');
+        const toggle = box.querySelector('.label-toggle');
+        
+        label.style.fontSize = sizeConfig.fontSize + 'px';
+        label.style.padding = sizeConfig.padding;
+        
+        if (effectiveLabels[i]) {
+            label.textContent = effectiveLabels[i];
+            label.classList.remove('hidden');
+            toggle.classList.add('active');
+            toggle.innerHTML = 'a';
+        } else {
+            label.classList.add('hidden');
+            toggle.classList.remove('active');
+            toggle.innerHTML = '<s>a</s>';
+        }
+    }
+    
+    createUploadZones();
+}
+
+function toggleAllLabels() {
+    const show = document.getElementById('show-all-labels').checked;
+    state.imageLabels = state.imageLabels.map(() => show);
+    updateAllLabels();
+}
+
+function updateLabelStyle() {
+    currentLabelStyle = document.getElementById('label-style').value;
+    updateAllLabels();
+}
+
+function getSnapGuides(element) {
+    if (!state.snapEnabled) return { x: null, y: null };
+    
+    const canvasArea = document.getElementById('canvas-area');
+    
+    const left = element.offsetLeft;
+    const right = left + element.offsetWidth;
+    const top = element.offsetTop;
+    const bottom = top + element.offsetHeight;
+    const centerX = left + element.offsetWidth / 2;
+    const centerY = top + element.offsetHeight / 2;
+    
+    const threshold = 10;
+    let bestX = null, bestY = null;
+    
+    for (let i = 0; i < state.imageCount; i++) {
+        if (i === parseInt(element.dataset.index)) continue;
+        const other = document.getElementById(`image-box-${i}`);
+        if (!other) continue;
+        
+        const oLeft = other.offsetLeft;
+        const oRight = oLeft + other.offsetWidth;
+        const oTop = other.offsetTop;
+        const oBottom = oTop + other.offsetHeight;
+        const oCenterX = oLeft + other.offsetWidth / 2;
+        const oCenterY = oTop + other.offsetHeight / 2;
+        
+        if (Math.abs(left - oLeft) < threshold) bestX = oLeft;
+        else if (Math.abs(left - oRight) < threshold) bestX = oRight;
+        else if (Math.abs(right - oLeft) < threshold) bestX = oLeft - element.offsetWidth;
+        else if (Math.abs(right - oRight) < threshold) bestX = oRight - element.offsetWidth;
+        else if (Math.abs(centerX - oCenterX) < threshold) bestX = oCenterX - element.offsetWidth / 2;
+        
+        if (Math.abs(top - oTop) < threshold) bestY = oTop;
+        else if (Math.abs(top - oBottom) < threshold) bestY = oBottom;
+        else if (Math.abs(bottom - oTop) < threshold) bestY = oTop - element.offsetHeight;
+        else if (Math.abs(bottom - oBottom) < threshold) bestY = oBottom - element.offsetHeight;
+        else if (Math.abs(centerY - oCenterY) < threshold) bestY = oCenterY - element.offsetHeight / 2;
+    }
+    
+    return { x: bestX, y: bestY };
+}
+
+function showSnapLine(x, y) {
+    const vLine = document.getElementById('snap-line-v');
+    const hLine = document.getElementById('snap-line-h');
+    
+    if (x !== null) {
+        vLine.style.left = x + 'px';
+        vLine.classList.add('active');
+    } else {
+        vLine.classList.remove('active');
+    }
+    
+    if (y !== null) {
+        hLine.style.top = y + 'px';
+        hLine.classList.add('active');
+    } else {
+        hLine.classList.remove('active');
+    }
+}
+
+function hideSnapLines() {
+    document.getElementById('snap-line-v').classList.remove('active');
+    document.getElementById('snap-line-h').classList.remove('active');
+}
+
+function distributeImages(direction) {
+    const boxes = [];
+    for (let i = 0; i < state.imageCount; i++) {
+        const box = document.getElementById(`image-box-${i}`);
+        if (box) boxes.push({ el: box, index: i });
+    }
+    
+    if (boxes.length < 3) {
+        alert('至少需要3张图片才能使用分布功能');
+        return;
+    }
+    
+    if (direction === 'horizontal') {
+        boxes.sort((a, b) => a.el.offsetLeft - b.el.offsetLeft);
+        const first = boxes[0].el.offsetLeft;
+        const last = boxes[boxes.length - 1].el.offsetLeft;
+        const totalGap = (last - first) / (boxes.length - 1);
+        
+        boxes.forEach((box, i) => {
+            if (i === 0 || i === boxes.length - 1) return;
+            box.el.style.left = (first + i * totalGap) + 'px';
+        });
+    } else {
+        boxes.sort((a, b) => a.el.offsetTop - b.el.offsetTop);
+        const first = boxes[0].el.offsetTop;
+        const last = boxes[boxes.length - 1].el.offsetTop;
+        const totalGap = (last - first) / (boxes.length - 1);
+        
+        boxes.forEach((box, i) => {
+            if (i === 0 || i === boxes.length - 1) return;
+            box.el.style.top = (first + i * totalGap) + 'px';
+        });
+    }
+}
+
+function alignImages(align) {
+    const boxes = [];
+    for (let i = 0; i < state.imageCount; i++) {
+        const box = document.getElementById(`image-box-${i}`);
+        if (box) boxes.push(box);
+    }
+    
+    if (boxes.length < 2) return;
+    
+    switch(align) {
+        case 'left':
+            const leftX = Math.min(...boxes.map(b => b.offsetLeft));
+            boxes.forEach(b => b.style.left = leftX + 'px');
+            break;
+        case 'right':
+            const rightX = Math.max(...boxes.map(b => b.offsetLeft + b.offsetWidth));
+            boxes.forEach(b => b.style.left = (rightX - b.offsetWidth) + 'px');
+            break;
+        case 'center-v':
+            const centerY = boxes.reduce((sum, b) => sum + b.offsetTop + b.offsetHeight/2, 0) / boxes.length;
+            boxes.forEach(b => b.style.top = (centerY - b.offsetHeight/2) + 'px');
+            break;
+    }
+}
+
+function equalizeSize() {
+    const boxes = [];
+    for (let i = 0; i < state.imageCount; i++) {
+        const box = document.getElementById(`image-box-${i}`);
+        if (box) boxes.push(box);
+    }
+    
+    if (boxes.length < 2) return;
+    
+    const avgW = Math.round(boxes.reduce((sum, b) => sum + b.offsetWidth, 0) / boxes.length);
+    const avgH = Math.round(boxes.reduce((sum, b) => sum + b.offsetHeight, 0) / boxes.length);
+    
+    boxes.forEach(b => {
+        b.style.width = avgW + 'px';
+        b.style.height = avgH + 'px';
+    });
+}
+
+function toggleSnap() {
+    state.snapEnabled = !state.snapEnabled;
+    document.getElementById('snap-btn').classList.toggle('active', state.snapEnabled);
+    const status = document.getElementById('snap-status');
+    status.textContent = state.snapEnabled ? '智能吸附: 开启' : '智能吸附: 关闭';
+    status.className = state.snapEnabled ? 
+        'text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full' : 
+        'text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded-full';
+}
+
+function startDrag(e, element, type) {
+    if (e.target.classList.contains('resize-handle') || 
+        e.target.classList.contains('delete-btn') ||
+        e.target.classList.contains('label-toggle') ||
+        e.target.classList.contains('fit-mode-btn') ||
+        e.target.classList.contains('sub-label')) return;
+    
+    e.preventDefault();
+    state.selectedElement = element;
+    state.isDragging = true;
+    
+    document.querySelectorAll('.image-box').forEach(el => el.classList.remove('selected'));
+    element.classList.add('selected');
+    
+    const rect = element.getBoundingClientRect();
+    const canvasRect = document.getElementById('canvas-area').getBoundingClientRect();
+    state.dragOffset = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+    };
+    
+    document.onmousemove = (e) => {
+        if (!state.isDragging) return;
+        
+        let x = e.clientX - canvasRect.left - state.dragOffset.x;
+        let y = e.clientY - canvasRect.top - state.dragOffset.y;
+        
+        x = Math.max(0, Math.min(x, canvasRect.width - element.offsetWidth));
+        y = Math.max(0, Math.min(y, canvasRect.height - element.offsetHeight));
+        
+        element.style.left = x + 'px';
+        element.style.top = y + 'px';
+        
+        const guides = getSnapGuides(element);
+        showSnapLine(guides.x, guides.y);
+        
+        if (guides.x !== null) element.style.left = guides.x + 'px';
+        if (guides.y !== null) element.style.top = guides.y + 'px';
+    };
+    
+    document.onmouseup = () => {
+        state.isDragging = false;
+        hideSnapLines();
+        document.onmousemove = null;
+        document.onmouseup = null;
+    };
+}
+
+function startResize(e, element, dir) {
+    e.preventDefault();
+    e.stopPropagation();
+    state.isResizing = true;
+    state.selectedElement = element;
+    
+    state.resizeStart = {
+        x: e.clientX,
+        y: e.clientY,
+        w: element.offsetWidth,
+        h: element.offsetHeight,
+        left: element.offsetLeft,
+        top: element.offsetTop
+    };
+    
+    document.onmousemove = (e) => {
+        if (!state.isResizing) return;
+        
+        const dx = e.clientX - state.resizeStart.x;
+        const dy = e.clientY - state.resizeStart.y;
+        
+        let newW = state.resizeStart.w + dx;
+        let newH = state.resizeStart.h + dy;
+        
+        newW = Math.max(100, newW);
+        newH = Math.max(80, newH);
+        
+        element.style.width = newW + 'px';
+        element.style.height = newH + 'px';
+    };
+    
+    document.onmouseup = () => {
+        state.isResizing = false;
+        document.onmousemove = null;
+        document.onmouseup = null;
+    };
+}
+
+function handleFile(event, index) {
+    const file = event.target.files[0];
+    if (file) processImage(file, index);
+}
+
+function handleDrop(event, index) {
+    event.preventDefault();
+    event.currentTarget.classList.remove('dragover');
+    const file = event.dataTransfer.files[0];
+    if (file && file.type.startsWith('image/')) {
+        processImage(file, index);
+    }
+}
+
+function processImage(file, index) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        state.images[index] = e.target.result;
+        createUploadZones();
+        autoLayout();
+    };
+    reader.readAsDataURL(file);
+}
+
+function removeImage(index) {
+    state.images[index] = null;
+    const el = document.getElementById(`image-box-${index}`);
+    if (el) el.remove();
+    createUploadZones();
+}
+
+function resetLayout() {
+    if (confirm('重置将恢复默认布局，是否继续？')) {
+        state.labelPositions = [{}, {}, {}, {}, {}, {}, {}, {}, {}];
+        autoLayout();
+    }
+}
+
+// ========== 标题样式控制 ==========
+function updateTitleStyle() {
+    const font = document.getElementById('title-font').value;
+    const size = document.getElementById('title-size').value;
+    const color = document.getElementById('title-color').value;
+    
+    state.titleStyle.fontFamily = font;
+    state.titleStyle.fontSize = parseInt(size);
+    state.titleStyle.color = color;
+    
+    applyTitleStyle();
+}
+
+function toggleTitleBold() {
+    const btn = document.getElementById('btn-bold');
+    btn.classList.toggle('active');
+    state.titleStyle.fontWeight = btn.classList.contains('active') ? 'bold' : '600';
+    applyTitleStyle();
+}
+
+function toggleTitleItalic() {
+    const btn = document.getElementById('btn-italic');
+    btn.classList.toggle('active');
+    state.titleStyle.fontStyle = btn.classList.contains('active') ? 'italic' : 'normal';
+    applyTitleStyle();
+}
+
+function toggleTitleUnderline() {
+    const btn = document.getElementById('btn-underline');
+    btn.classList.toggle('active');
+    state.titleStyle.textDecoration = btn.classList.contains('active') ? 'underline' : 'none';
+    applyTitleStyle();
+}
+
+function applyTitleStyle() {
+    const display = document.getElementById('bottom-title-display');
+    if (display) {
+        display.style.fontFamily = state.titleStyle.fontFamily;
+        display.style.fontSize = state.titleStyle.fontSize + 'px';
+        display.style.fontWeight = state.titleStyle.fontWeight;
+        display.style.fontStyle = state.titleStyle.fontStyle;
+        display.style.textDecoration = state.titleStyle.textDecoration;
+        display.style.color = state.titleStyle.color;
+    }
+}
+
+function updateMainTitle() {
+    const title = document.getElementById('main-title').value;
+    let display = document.getElementById('bottom-title-display');
+    const canvasArea = document.getElementById('canvas-area');
+    
+    if (!display) {
+        display = document.createElement('div');
+        display.id = 'bottom-title-display';
+        display.className = 'bottom-title';
+        
+        makeTitleDraggable(display);
+        
+        canvasArea.appendChild(display);
+        applyTitleStyle();
+    }
+    
+    display.textContent = title;
+    
+    if (title) {
+        display.classList.remove('hidden');
+    } else {
+        display.classList.add('hidden');
+    }
+}
+
+function makeTitleDraggable(element) {
+    let isDragging = false;
+    let offset = { x: 0, y: 0 };
+    
+    element.onmousedown = (e) => {
+        isDragging = true;
+        element.classList.add('dragging');
+        
+        const rect = element.getBoundingClientRect();
+        offset.x = e.clientX - rect.left;
+        offset.y = e.clientY - rect.top;
+        
+        const canvasArea = document.getElementById('canvas-area');
+        
+        document.onmousemove = (e) => {
+            if (!isDragging) return;
+            
+            const container = canvasArea.getBoundingClientRect();
+            let x = e.clientX - container.left - offset.x;
+            let y = e.clientY - container.top - offset.y;
+            
+            x = Math.max(0, Math.min(x, container.width - element.offsetWidth));
+            y = Math.max(0, Math.min(y, container.height - element.offsetHeight));
+            
+            element.style.left = x + 'px';
+            element.style.top = y + 'px';
+            element.style.transform = 'none';
+            
+            state.titlePosition.x = x;
+            state.titlePosition.y = y;
+        };
+        
+        document.onmouseup = () => {
+            isDragging = false;
+            element.classList.remove('dragging');
+            document.onmousemove = null;
+            document.onmouseup = null;
+        };
+    };
+}
+
+// ========== 导出图片（修复版）==========
+function exportImage() {
+    const canvasArea = document.getElementById('canvas-area');
+    const canvasContainer = document.getElementById('canvas-container');
+    
+    // 保存当前状态
+    const originalSelected = document.querySelectorAll('.image-box.selected');
+    const originalBg = canvasArea.style.backgroundImage;
+    
+    // 隐藏编辑控件（但不隐藏图片）
+    document.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
+    document.querySelectorAll('.delete-btn, .resize-handle, .label-toggle, .fit-mode-btn').forEach(el => {
+        el.style.visibility = 'hidden';
+    });
+    
+    // 隐藏刻度尺
+    const rulerH = document.getElementById('ruler-h');
+    const rulerV = document.getElementById('ruler-v');
+    rulerH.style.display = 'none';
+    rulerV.style.display = 'none';
+    
+    // 移除画布格子背景
+    canvasArea.style.backgroundImage = 'none';
+    
+    // 获取画布实际尺寸
+    const canvasWidth = canvasArea.offsetWidth;
+    const canvasHeight = canvasArea.offsetHeight;
+    
+    // 使用html2canvas导出
+    html2canvas(canvasArea, {
+        scale: 2,
+        backgroundColor: '#ffffff',
+        useCORS: true,
+        logging: false,
+        allowTaint: true,
+        width: canvasWidth,
+        height: canvasHeight,
+        x: 0,
+        y: 0
+    }).then(canvas => {
+        // 恢复编辑控件
+        document.querySelectorAll('.delete-btn, .resize-handle, .label-toggle, .fit-mode-btn').forEach(el => {
+            el.style.visibility = 'visible';
+        });
+        originalSelected.forEach(el => el.classList.add('selected'));
+        
+        // 恢复样式
+        canvasArea.style.backgroundImage = originalBg;
+        rulerH.style.display = '';
+        rulerV.style.display = '';
+        
+        // 下载图片
+        const link = document.createElement('a');
+        const timestamp = new Date().getTime();
+        link.download = `Figure_${timestamp}.png`;
+        link.href = canvas.toDataURL('image/png', 1.0);
+        link.click();
+        
+        alert('图片导出成功！');
+    }).catch(err => {
+        console.error('导出失败:', err);
+        alert('导出失败，请重试');
+        
+        // 恢复样式
+        canvasArea.style.backgroundImage = originalBg;
+        rulerH.style.display = '';
+        rulerV.style.display = '';
+        document.querySelectorAll('.delete-btn, .resize-handle, .label-toggle, .fit-mode-btn').forEach(el => {
+            el.style.visibility = 'visible';
+        });
+    });
+}
+
+function initializeCanvas() {
+    const canvasArea = document.getElementById('canvas-area');
+    canvasArea.innerHTML = `
+        <div class="snap-line vertical" id="snap-line-v"></div>
+        <div class="snap-line horizontal" id="snap-line-h"></div>
+    `;
+}
+
+window.onload = init;
+</script>
+
+</body>
+</html>
